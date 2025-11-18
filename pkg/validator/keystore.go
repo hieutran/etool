@@ -23,9 +23,9 @@ type Keystore struct {
 
 // CryptoFields contains the cryptographic fields for the keystore
 type CryptoFields struct {
-	KDF        KDFFields        `json:"kdf"`
-	Checksum   ChecksumFields   `json:"checksum"`
-	Cipher     CipherFields     `json:"cipher"`
+	KDF      KDFFields      `json:"kdf"`
+	Checksum ChecksumFields `json:"checksum"`
+	Cipher   CipherFields   `json:"cipher"`
 }
 
 // KDFFields contains the key derivation function parameters
@@ -108,12 +108,22 @@ func SavePassword(password string, outputPath string) error {
 
 // CreateKeystoreFileName creates a standard keystore filename
 func CreateKeystoreFileName(pubkey string) string {
-	return fmt.Sprintf("keystore-%s.json", pubkey[:12])
+	end := 12
+	if len(pubkey) < end {
+		end = len(pubkey)
+	}
+	prefix := pubkey[:end]
+	return fmt.Sprintf("keystore-%s.json", prefix)
 }
 
 // CreatePasswordFileName creates a standard password filename
 func CreatePasswordFileName(pubkey string) string {
-	return fmt.Sprintf("keystore-%s.txt", pubkey[:12])
+	end := 12
+	if len(pubkey) < end {
+		end = len(pubkey)
+	}
+	prefix := pubkey[:end]
+	return fmt.Sprintf("keystore-%s.txt", prefix)
 }
 
 // NewUUID generates a new UUID for the keystore
