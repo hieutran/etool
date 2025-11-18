@@ -33,18 +33,26 @@ func (s *BeaconState) HashTreeRootWith(hh *ssz.Hasher) error {
 
 	// Field (3) 'Fork'
 	if s.Fork == nil {
-		s.Fork = &Fork{}
-	}
-	if err := s.Fork.HashTreeRootWith(hh); err != nil {
-		return err
+		tmpFork := &Fork{}
+		if err := tmpFork.HashTreeRootWith(hh); err != nil {
+			return err
+		}
+	} else {
+		if err := s.Fork.HashTreeRootWith(hh); err != nil {
+			return err
+		}
 	}
 
 	// Field (4) 'LatestBlockHeader'
 	if s.LatestBlockHeader == nil {
-		s.LatestBlockHeader = &BeaconBlockHeader{}
-	}
-	if err := s.LatestBlockHeader.HashTreeRootWith(hh); err != nil {
-		return err
+		tmpHeader := &BeaconBlockHeader{}
+		if err := tmpHeader.HashTreeRootWith(hh); err != nil {
+			return err
+		}
+	} else {
+		if err := s.LatestBlockHeader.HashTreeRootWith(hh); err != nil {
+			return err
+		}
 	}
 
 	// Field (5) 'BlockRoots'
@@ -77,10 +85,14 @@ func (s *BeaconState) HashTreeRootWith(hh *ssz.Hasher) error {
 
 	// Field (8) 'Eth1Data'
 	if s.Eth1Data == nil {
-		s.Eth1Data = &Eth1Data{}
-	}
-	if err := s.Eth1Data.HashTreeRootWith(hh); err != nil {
-		return err
+		tmpEth1Data := &Eth1Data{}
+		if err := tmpEth1Data.HashTreeRootWith(hh); err != nil {
+			return err
+		}
+	} else {
+		if err := s.Eth1Data.HashTreeRootWith(hh); err != nil {
+			return err
+		}
 	}
 
 	// Field (9) 'Eth1DataVotes'
@@ -168,26 +180,38 @@ func (s *BeaconState) HashTreeRootWith(hh *ssz.Hasher) error {
 
 	// Field (18) 'PreviousJustifiedCheckpoint'
 	if s.PreviousJustifiedCheckpoint == nil {
-		s.PreviousJustifiedCheckpoint = &Checkpoint{}
-	}
-	if err := s.PreviousJustifiedCheckpoint.HashTreeRootWith(hh); err != nil {
-		return err
+		tmpCheckpoint := &Checkpoint{}
+		if err := tmpCheckpoint.HashTreeRootWith(hh); err != nil {
+			return err
+		}
+	} else {
+		if err := s.PreviousJustifiedCheckpoint.HashTreeRootWith(hh); err != nil {
+			return err
+		}
 	}
 
 	// Field (19) 'CurrentJustifiedCheckpoint'
 	if s.CurrentJustifiedCheckpoint == nil {
-		s.CurrentJustifiedCheckpoint = &Checkpoint{}
-	}
-	if err := s.CurrentJustifiedCheckpoint.HashTreeRootWith(hh); err != nil {
-		return err
+		tmpCheckpoint := &Checkpoint{}
+		if err := tmpCheckpoint.HashTreeRootWith(hh); err != nil {
+			return err
+		}
+	} else {
+		if err := s.CurrentJustifiedCheckpoint.HashTreeRootWith(hh); err != nil {
+			return err
+		}
 	}
 
 	// Field (20) 'FinalizedCheckpoint'
 	if s.FinalizedCheckpoint == nil {
-		s.FinalizedCheckpoint = &Checkpoint{}
-	}
-	if err := s.FinalizedCheckpoint.HashTreeRootWith(hh); err != nil {
-		return err
+		tmpCheckpoint := &Checkpoint{}
+		if err := tmpCheckpoint.HashTreeRootWith(hh); err != nil {
+			return err
+		}
+	} else {
+		if err := s.FinalizedCheckpoint.HashTreeRootWith(hh); err != nil {
+			return err
+		}
 	}
 
 	// Field (21) 'InactivityScores'
@@ -202,26 +226,38 @@ func (s *BeaconState) HashTreeRootWith(hh *ssz.Hasher) error {
 
 	// Field (22) 'CurrentSyncCommittee'
 	if s.CurrentSyncCommittee == nil {
-		s.CurrentSyncCommittee = newEmptySyncCommittee()
-	}
-	if err := s.CurrentSyncCommittee.HashTreeRootWith(hh); err != nil {
-		return err
+		tmpSyncCommittee := newEmptySyncCommittee()
+		if err := tmpSyncCommittee.HashTreeRootWith(hh); err != nil {
+			return err
+		}
+	} else {
+		if err := s.CurrentSyncCommittee.HashTreeRootWith(hh); err != nil {
+			return err
+		}
 	}
 
 	// Field (23) 'NextSyncCommittee'
 	if s.NextSyncCommittee == nil {
-		s.NextSyncCommittee = newEmptySyncCommittee()
-	}
-	if err := s.NextSyncCommittee.HashTreeRootWith(hh); err != nil {
-		return err
+		tmpSyncCommittee := newEmptySyncCommittee()
+		if err := tmpSyncCommittee.HashTreeRootWith(hh); err != nil {
+			return err
+		}
+	} else {
+		if err := s.NextSyncCommittee.HashTreeRootWith(hh); err != nil {
+			return err
+		}
 	}
 
 	// Field (24) 'LatestExecutionPayloadHeader'
 	if s.LatestExecutionPayloadHeader == nil {
-		s.LatestExecutionPayloadHeader = &ExecutionPayloadHeader{}
-	}
-	if err := s.LatestExecutionPayloadHeader.HashTreeRootWith(hh); err != nil {
-		return err
+		tmpHeader := &ExecutionPayloadHeader{}
+		if err := tmpHeader.HashTreeRootWith(hh); err != nil {
+			return err
+		}
+	} else {
+		if err := s.LatestExecutionPayloadHeader.HashTreeRootWith(hh); err != nil {
+			return err
+		}
 	}
 
 	// Field (25) 'NextWithdrawalIndex'
