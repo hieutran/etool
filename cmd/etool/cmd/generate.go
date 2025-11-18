@@ -124,6 +124,11 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Validate numValidators after override
+	if numValidators == 0 {
+		return fmt.Errorf("num-validators must be greater than 0")
+	}
+
 	// Step 4: Generate execution layer genesis
 	fmt.Printf("⚙️  Generating execution layer genesis (genesis.json)...\n")
 	execConfig := genesis.DefaultExecutionConfig()

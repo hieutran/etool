@@ -95,20 +95,14 @@ func (v *ImportedValidator) GetWithdrawalPubKeyBytes() []byte {
 
 // SignDepositData signs the deposit data using BLS signature
 func (v *ImportedValidator) SignDepositData(depositMessageRoot []byte, domain []byte) ([]byte, error) {
-	// Combine deposit message root with domain for signing root
-	signingRoot := make([]byte, 64)
-	copy(signingRoot[:32], depositMessageRoot)
-	copy(signingRoot[32:], domain)
-
-	// Hash the signing root using SHA256
-	hasher := func() [32]byte {
-		var hash [32]byte
-		copy(hash[:], signingRoot)
-		return hash
-	}()
+	// Compute signing root properly using the SSZ helper
+	signingRoot, err := ComputeSigningRoot(depositMessageRoot, domain)
+	if err != nil {
+		return nil, err
+	}
 
 	// Sign with BLS
-	signature := v.ValidatorPrivateKey.Sign(hasher[:])
+	signature := v.ValidatorPrivateKey.Sign(signingRoot[:])
 
 	return signature.Marshal(), nil
 }
