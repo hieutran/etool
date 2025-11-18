@@ -48,12 +48,23 @@ func CreateValidatorFromPrivateKey(privateKeyHex string, index uint64) (*Importe
 	// This is a simple approach - in production you might want to derive a separate withdrawal key
 	withdrawalPrivKey := validatorPrivKey
 
+	// Get public keys with proper type assertion
+	validatorPubKey, ok := validatorPrivKey.PublicKey().(*e2types.BLSPublicKey)
+	if !ok {
+		return nil, fmt.Errorf("failed to assert validator public key type")
+	}
+
+	withdrawalPubKey, ok := withdrawalPrivKey.PublicKey().(*e2types.BLSPublicKey)
+	if !ok {
+		return nil, fmt.Errorf("failed to assert withdrawal public key type")
+	}
+
 	return &ImportedValidator{
 		Index:                index,
 		ValidatorPrivateKey:  validatorPrivKey,
-		ValidatorPublicKey:   validatorPrivKey.PublicKey(),
+		ValidatorPublicKey:   validatorPubKey,
 		WithdrawalPrivateKey: withdrawalPrivKey,
-		WithdrawalPublicKey:  withdrawalPrivKey.PublicKey(),
+		WithdrawalPublicKey:  withdrawalPubKey,
 	}, nil
 }
 

@@ -3,18 +3,23 @@ package genesis
 import (
 	"fmt"
 
-	"github.com/ferranbt/fastssz"
+	ssz "github.com/ferranbt/fastssz"
 )
 
 // Implement HashTreeRoot methods using fastssz properly
 
-// HashTreeRoot implements fastssz.HashRoot for BeaconState
+// HashTreeRoot implements ssz.HashRoot for BeaconState
 func (s *BeaconState) HashTreeRoot() ([32]byte, error) {
-	return fastssz.HashWithDefaultHasher(s)
+	hh := ssz.DefaultHasherPool.Get()
+	defer ssz.DefaultHasherPool.Put(hh)
+	if err := s.HashTreeRootWith(hh); err != nil {
+		return [32]byte{}, err
+	}
+	return hh.HashRoot()
 }
 
-// HashTreeRootWith implements fastssz.HashRoot for BeaconState
-func (s *BeaconState) HashTreeRootWith(hh fastssz.HashWalker) error {
+// HashTreeRootWith implements ssz.HashRoot for BeaconState
+func (s *BeaconState) HashTreeRootWith(hh *ssz.Hasher) error {
 	indx := hh.Index()
 
 	// Field (0) 'GenesisTime'
@@ -98,9 +103,12 @@ func (s *BeaconState) HashTreeRootWith(hh fastssz.HashWalker) error {
 		subIndx := hh.Index()
 		num := uint64(len(s.Validators))
 		for _, elem := range s.Validators {
-			if err := elem.HashTreeRootWith(hh); err != nil {
+			// Call HashTreeRoot directly and append the result
+			root, err := elem.HashTreeRoot()
+			if err != nil {
 				return err
 			}
+			hh.Append(root[:])
 		}
 		hh.MerkleizeWithMixin(subIndx, num, 1099511627776)
 	}
@@ -239,7 +247,7 @@ func (s *BeaconState) HashTreeRootWith(hh fastssz.HashWalker) error {
 }
 
 // HashTreeRootWith for Fork
-func (f *Fork) HashTreeRootWith(hh fastssz.HashWalker) error {
+func (f *Fork) HashTreeRootWith(hh ssz.HashWalker) error {
 	indx := hh.Index()
 	hh.PutBytes(f.PreviousVersion[:])
 	hh.PutBytes(f.CurrentVersion[:])
@@ -249,7 +257,7 @@ func (f *Fork) HashTreeRootWith(hh fastssz.HashWalker) error {
 }
 
 // HashTreeRootWith for BeaconBlockHeader
-func (b *BeaconBlockHeader) HashTreeRootWith(hh fastssz.HashWalker) error {
+func (b *BeaconBlockHeader) HashTreeRootWith(hh ssz.HashWalker) error {
 	indx := hh.Index()
 	hh.PutUint64(b.Slot)
 	hh.PutUint64(b.ProposerIndex)
@@ -261,7 +269,7 @@ func (b *BeaconBlockHeader) HashTreeRootWith(hh fastssz.HashWalker) error {
 }
 
 // HashTreeRootWith for Eth1Data
-func (e *Eth1Data) HashTreeRootWith(hh fastssz.HashWalker) error {
+func (e *Eth1Data) HashTreeRootWith(hh ssz.HashWalker) error {
 	indx := hh.Index()
 	hh.PutBytes(e.DepositRoot[:])
 	hh.PutUint64(e.DepositCount)
@@ -271,7 +279,7 @@ func (e *Eth1Data) HashTreeRootWith(hh fastssz.HashWalker) error {
 }
 
 // HashTreeRootWith for Checkpoint
-func (c *Checkpoint) HashTreeRootWith(hh fastssz.HashWalker) error {
+func (c *Checkpoint) HashTreeRootWith(hh ssz.HashWalker) error {
 	indx := hh.Index()
 	hh.PutUint64(c.Epoch)
 	hh.PutBytes(c.Root[:])
@@ -280,7 +288,7 @@ func (c *Checkpoint) HashTreeRootWith(hh fastssz.HashWalker) error {
 }
 
 // HashTreeRootWith for SyncCommittee
-func (s *SyncCommittee) HashTreeRootWith(hh fastssz.HashWalker) error {
+func (s *SyncCommittee) HashTreeRootWith(hh ssz.HashWalker) error {
 	indx := hh.Index()
 
 	// Field (0) 'Pubkeys'
@@ -300,7 +308,7 @@ func (s *SyncCommittee) HashTreeRootWith(hh fastssz.HashWalker) error {
 }
 
 // HashTreeRootWith for ExecutionPayloadHeader
-func (e *ExecutionPayloadHeader) HashTreeRootWith(hh fastssz.HashWalker) error {
+func (e *ExecutionPayloadHeader) HashTreeRootWith(hh ssz.HashWalker) error {
 	indx := hh.Index()
 
 	hh.PutBytes(e.ParentHash[:])
@@ -337,7 +345,7 @@ func (e *ExecutionPayloadHeader) HashTreeRootWith(hh fastssz.HashWalker) error {
 }
 
 // HashTreeRootWith for HistoricalSummary
-func (h *HistoricalSummary) HashTreeRootWith(hh fastssz.HashWalker) error {
+func (h *HistoricalSummary) HashTreeRootWith(hh ssz.HashWalker) error {
 	indx := hh.Index()
 	hh.PutBytes(h.BlockSummaryRoot[:])
 	hh.PutBytes(h.StateSummaryRoot[:])
@@ -347,15 +355,25 @@ func (h *HistoricalSummary) HashTreeRootWith(hh fastssz.HashWalker) error {
 
 // MarshalSSZ encodes BeaconState using fastssz
 func (s *BeaconState) MarshalSSZ() ([]byte, error) {
-	return fastssz.MarshalSSZ(s)
+	buf := make([]byte, s.SizeSSZ())
+	return s.MarshalSSZTo(buf[:0])
 }
 
 // MarshalSSZTo encodes BeaconState to a pre-allocated buffer
 func (s *BeaconState) MarshalSSZTo(buf []byte) ([]byte, error) {
-	return fastssz.MarshalSSZTo(s, buf)
+	// This is a simplified implementation - in production, use fastssz code generator
+	// For now, we mainly need HashTreeRoot which is already implemented
+	return buf, fmt.Errorf("MarshalSSZTo not fully implemented - use fastssz code generator")
 }
 
 // SizeSSZ returns the size of the SSZ encoding
 func (s *BeaconState) SizeSSZ() int {
-	return fastssz.SizeSSZ(s)
+	// Return approximate size - this would be precise with fastssz code generator
+	size := 0
+	size += 8  // GenesisTime
+	size += 32 // GenesisValidatorsRoot
+	size += 8  // Slot
+	// ... more fields
+	// For now return a large enough buffer
+	return 2_000_000 // 2MB should be enough for most beacon states
 }

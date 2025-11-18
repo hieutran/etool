@@ -69,12 +69,6 @@ func (g *BLSDepositGenerator) GenerateDepositData(keys *BLSValidatorKeys) (*Depo
 	// Compute domain
 	domain := ComputeDepositDomain(g.forkVersion)
 
-	// Compute signing root
-	signingRoot, err := ComputeSigningRoot(depositMessageRoot[:], domain)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compute signing root: %w", err)
-	}
-
 	// Sign with BLS
 	signatureBytes, err := keys.SignDepositData(depositMessageRoot[:], domain)
 	if err != nil {

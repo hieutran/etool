@@ -15,14 +15,15 @@ import (
 )
 
 var (
-	chainID              uint64
-	networkName          string
-	numValidators        uint64
-	mnemonic             string
-	validatorPrivateKeys []string
-	genesisTime          uint64
-	prefundAccounts      []string
-	prefundBalance       string
+	chainID               uint64
+	networkName           string
+	numValidators         uint64
+	mnemonic              string
+	validatorPrivateKeys  []string
+	genesisTime           uint64
+	prefundAccounts       []string
+	prefundBalance        string
+	disableDefaultPrefund bool
 )
 
 var generateCmd = &cobra.Command{
@@ -49,6 +50,7 @@ func init() {
 	generateCmd.Flags().Uint64Var(&genesisTime, "genesis-time", 0, "Genesis timestamp (uses current time if 0)")
 	generateCmd.Flags().StringSliceVar(&prefundAccounts, "prefund-accounts", []string{}, "Accounts to prefund (comma-separated addresses)")
 	generateCmd.Flags().StringVar(&prefundBalance, "prefund-balance", "1000000000000000000000", "Balance for prefunded accounts in wei (default: 1000 ETH)")
+	generateCmd.Flags().BoolVar(&disableDefaultPrefund, "disable-default-prefund", false, "Disable adding the default prefunded account (10,000 ETH to 0x1234...b524)")
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
@@ -136,7 +138,9 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	// Add prefunded accounts
 	if len(prefundAccounts) > 0 {
 		balance := new(big.Int)
-		balance.SetString(prefundBalance, 10)
+		if _, ok := balance.SetString(prefundBalance, 10); !ok {
+			return fmt.Errorf("invalid prefund-balance: %q (must be a valid integer string)", prefundBalance)
+		}
 		for _, addr := range prefundAccounts {
 			if !common.IsHexAddress(addr) {
 				return fmt.Errorf("invalid address: %s", addr)
@@ -146,12 +150,16 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Add default prefunded account for convenience
-	defaultAccount := common.HexToAddress("0x123463a4B065722E99115D6c222f267d9cABb524")
-	defaultBalance := new(big.Int)
-	defaultBalance.SetString("10000000000000000000000", 10) // 10,000 ETH
-	execGen.AddPrefundedAccount(defaultAccount, defaultBalance)
-	fmt.Printf("   💰 Prefunding default account %s with 10,000 ETH\n", defaultAccount.Hex())
+	// Optionally add default prefunded account for convenience
+	if !disableDefaultPrefund {
+		defaultAccount := common.HexToAddress("0x123463a4B065722E99115D6c222f267d9cABb524")
+		defaultBalance := new(big.Int)
+		if _, ok := defaultBalance.SetString("10000000000000000000000", 10); !ok {
+			return fmt.Errorf("internal error: failed to parse default balance")
+		}
+		execGen.AddPrefundedAccount(defaultAccount, defaultBalance)
+		fmt.Printf("   💰 Prefunding default account %s with 10,000 ETH\n", defaultAccount.Hex())
+	}
 
 	genesisPath := filepath.Join(outputDir, "genesis.json")
 	if err := execGen.GenerateToFile(genesisPath); err != nil {

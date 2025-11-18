@@ -4,66 +4,68 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
+	ssz "github.com/ferranbt/fastssz"
 	"github.com/hieutran/etool/pkg/validator"
-	"github.com/ferranbt/fastssz"
 )
 
 // BeaconState represents the Ethereum consensus layer state at genesis
 // This is a simplified implementation focusing on Deneb/Capella features
 type BeaconState struct {
 	// Versioning
-	GenesisTime                  uint64   `ssz-size:"8"`
-	GenesisValidatorsRoot        [32]byte `ssz-size:"32"`
-	Slot                         uint64   `ssz-size:"8"`
-	Fork                         *Fork    `ssz-size:"16"`
+	GenesisTime           uint64   `ssz-size:"8"`
+	GenesisValidatorsRoot [32]byte `ssz-size:"32"`
+	Slot                  uint64   `ssz-size:"8"`
+	Fork                  *Fork    `ssz-size:"16"`
 
 	// History
-	LatestBlockHeader            *BeaconBlockHeader    `ssz-size:"112"`
-	BlockRoots                   [][32]byte            `ssz-size:"8192,32"` // SLOTS_PER_HISTORICAL_ROOT
-	StateRoots                   [][32]byte            `ssz-size:"8192,32"` // SLOTS_PER_HISTORICAL_ROOT
-	HistoricalRoots              [][32]byte            `ssz-size:"?,32" ssz-max:"16777216"`
+	LatestBlockHeader *BeaconBlockHeader `ssz-size:"112"`
+	BlockRoots        [][32]byte         `ssz-size:"8192,32"` // SLOTS_PER_HISTORICAL_ROOT
+	StateRoots        [][32]byte         `ssz-size:"8192,32"` // SLOTS_PER_HISTORICAL_ROOT
+	HistoricalRoots   [][32]byte         `ssz-size:"?,32" ssz-max:"16777216"`
 
 	// Eth1
-	Eth1Data                     *Eth1Data             `ssz-size:"72"`
-	Eth1DataVotes                []*Eth1Data           `ssz-size:"?,72" ssz-max:"2048"`
-	Eth1DepositIndex             uint64                `ssz-size:"8"`
+	Eth1Data         *Eth1Data   `ssz-size:"72"`
+	Eth1DataVotes    []*Eth1Data `ssz-size:"?,72" ssz-max:"2048"`
+	Eth1DepositIndex uint64      `ssz-size:"8"`
 
 	// Registry
-	Validators                   []*Validator          `ssz-size:"?,121" ssz-max:"1099511627776"`
-	Balances                     []uint64              `ssz-size:"?,8" ssz-max:"1099511627776"`
+	Validators []*Validator `ssz-size:"?,121" ssz-max:"1099511627776"`
+	Balances   []uint64     `ssz-size:"?,8" ssz-max:"1099511627776"`
 
 	// Randomness
-	RandaoMixes                  [][32]byte            `ssz-size:"65536,32"` // EPOCHS_PER_HISTORICAL_VECTOR
+	RandaoMixes [][32]byte `ssz-size:"65536,32"` // EPOCHS_PER_HISTORICAL_VECTOR
 
 	// Slashings
-	Slashings                    []uint64              `ssz-size:"8192,8"` // EPOCHS_PER_SLASHINGS_VECTOR
+	Slashings []uint64 `ssz-size:"8192,8"` // EPOCHS_PER_SLASHINGS_VECTOR
 
 	// Participation (Altair+)
-	PreviousEpochParticipation   []byte                `ssz-size:"?,1" ssz-max:"1099511627776"`
-	CurrentEpochParticipation    []byte                `ssz-size:"?,1" ssz-max:"1099511627776"`
+	PreviousEpochParticipation []byte `ssz-size:"?,1" ssz-max:"1099511627776"`
+	CurrentEpochParticipation  []byte `ssz-size:"?,1" ssz-max:"1099511627776"`
 
 	// Finality
-	JustificationBits            [1]byte               `ssz-size:"1"`
-	PreviousJustifiedCheckpoint  *Checkpoint           `ssz-size:"40"`
-	CurrentJustifiedCheckpoint   *Checkpoint           `ssz-size:"40"`
-	FinalizedCheckpoint          *Checkpoint           `ssz-size:"40"`
+	JustificationBits           [1]byte     `ssz-size:"1"`
+	PreviousJustifiedCheckpoint *Checkpoint `ssz-size:"40"`
+	CurrentJustifiedCheckpoint  *Checkpoint `ssz-size:"40"`
+	FinalizedCheckpoint         *Checkpoint `ssz-size:"40"`
 
 	// Inactivity (Altair+)
-	InactivityScores             []uint64              `ssz-size:"?,8" ssz-max:"1099511627776"`
+	InactivityScores []uint64 `ssz-size:"?,8" ssz-max:"1099511627776"`
 
 	// Sync (Altair+)
-	CurrentSyncCommittee         *SyncCommittee        `ssz-size:"24624"`
-	NextSyncCommittee            *SyncCommittee        `ssz-size:"24624"`
+	CurrentSyncCommittee *SyncCommittee `ssz-size:"24624"`
+	NextSyncCommittee    *SyncCommittee `ssz-size:"24624"`
 
 	// Execution (Bellatrix+)
 	LatestExecutionPayloadHeader *ExecutionPayloadHeader `ssz-size:"584"`
 
 	// Withdrawals (Capella+)
-	NextWithdrawalIndex          uint64                `ssz-size:"8"`
-	NextWithdrawalValidatorIndex uint64                `ssz-size:"8"`
-	HistoricalSummaries          []*HistoricalSummary  `ssz-size:"?,64" ssz-max:"16777216"`
+	NextWithdrawalIndex          uint64               `ssz-size:"8"`
+	NextWithdrawalValidatorIndex uint64               `ssz-size:"8"`
+	HistoricalSummaries          []*HistoricalSummary `ssz-size:"?,64" ssz-max:"16777216"`
 }
 
 // Fork represents a consensus fork
@@ -101,6 +103,39 @@ type Validator struct {
 	WithdrawableEpoch          uint64   `ssz-size:"8"`
 }
 
+// HashTreeRoot computes the hash tree root of a Validator
+func (v *Validator) HashTreeRoot() ([32]byte, error) {
+	hh := ssz.DefaultHasherPool.Get()
+	defer ssz.DefaultHasherPool.Put(hh)
+
+	// Field (0) 'Pubkey'
+	hh.PutBytes(v.Pubkey[:])
+
+	// Field (1) 'WithdrawalCredentials'
+	hh.PutBytes(v.WithdrawalCredentials[:])
+
+	// Field (2) 'EffectiveBalance'
+	hh.PutUint64(v.EffectiveBalance)
+
+	// Field (3) 'Slashed'
+	hh.PutBool(v.Slashed)
+
+	// Field (4) 'ActivationEligibilityEpoch'
+	hh.PutUint64(v.ActivationEligibilityEpoch)
+
+	// Field (5) 'ActivationEpoch'
+	hh.PutUint64(v.ActivationEpoch)
+
+	// Field (6) 'ExitEpoch'
+	hh.PutUint64(v.ExitEpoch)
+
+	// Field (7) 'WithdrawableEpoch'
+	hh.PutUint64(v.WithdrawableEpoch)
+
+	hh.Merkleize(0)
+	return hh.HashRoot()
+}
+
 // Checkpoint represents a justified/finalized checkpoint
 type Checkpoint struct {
 	Epoch uint64   `ssz-size:"8"`
@@ -115,23 +150,23 @@ type SyncCommittee struct {
 
 // ExecutionPayloadHeader represents execution payload header (Bellatrix+)
 type ExecutionPayloadHeader struct {
-	ParentHash       [32]byte `ssz-size:"32"`
-	FeeRecipient     [20]byte `ssz-size:"20"`
-	StateRoot        [32]byte `ssz-size:"32"`
-	ReceiptsRoot     [32]byte `ssz-size:"32"`
+	ParentHash       [32]byte  `ssz-size:"32"`
+	FeeRecipient     [20]byte  `ssz-size:"20"`
+	StateRoot        [32]byte  `ssz-size:"32"`
+	ReceiptsRoot     [32]byte  `ssz-size:"32"`
 	LogsBloom        [256]byte `ssz-size:"256"`
-	PrevRandao       [32]byte `ssz-size:"32"`
-	BlockNumber      uint64   `ssz-size:"8"`
-	GasLimit         uint64   `ssz-size:"8"`
-	GasUsed          uint64   `ssz-size:"8"`
-	Timestamp        uint64   `ssz-size:"8"`
-	ExtraData        []byte   `ssz-size:"?,1" ssz-max:"32"`
-	BaseFeePerGas    [32]byte `ssz-size:"32"`
-	BlockHash        [32]byte `ssz-size:"32"`
-	TransactionsRoot [32]byte `ssz-size:"32"`
-	WithdrawalsRoot  [32]byte `ssz-size:"32"` // Capella+
-	BlobGasUsed      uint64   `ssz-size:"8"`  // Deneb+
-	ExcessBlobGas    uint64   `ssz-size:"8"`  // Deneb+
+	PrevRandao       [32]byte  `ssz-size:"32"`
+	BlockNumber      uint64    `ssz-size:"8"`
+	GasLimit         uint64    `ssz-size:"8"`
+	GasUsed          uint64    `ssz-size:"8"`
+	Timestamp        uint64    `ssz-size:"8"`
+	ExtraData        []byte    `ssz-size:"?,1" ssz-max:"32"`
+	BaseFeePerGas    [32]byte  `ssz-size:"32"`
+	BlockHash        [32]byte  `ssz-size:"32"`
+	TransactionsRoot [32]byte  `ssz-size:"32"`
+	WithdrawalsRoot  [32]byte  `ssz-size:"32"` // Capella+
+	BlobGasUsed      uint64    `ssz-size:"8"`  // Deneb+
+	ExcessBlobGas    uint64    `ssz-size:"8"`  // Deneb+
 }
 
 // HistoricalSummary represents historical summary (Capella+)
@@ -142,15 +177,15 @@ type HistoricalSummary struct {
 
 // Constants for genesis state
 const (
-	FAR_FUTURE_EPOCH                 = uint64(^uint64(0))
-	GENESIS_EPOCH                    = uint64(0)
-	GENESIS_SLOT                     = uint64(0)
-	SLOTS_PER_HISTORICAL_ROOT        = 8192
-	EPOCHS_PER_HISTORICAL_VECTOR     = 65536
-	EPOCHS_PER_SLASHINGS_VECTOR      = 8192
-	SYNC_COMMITTEE_SIZE              = 512
-	MAX_EFFECTIVE_BALANCE            = uint64(32000000000) // 32 ETH in Gwei
-	EFFECTIVE_BALANCE_INCREMENT      = uint64(1000000000)  // 1 ETH in Gwei
+	FAR_FUTURE_EPOCH             = uint64(^uint64(0))
+	GENESIS_EPOCH                = uint64(0)
+	GENESIS_SLOT                 = uint64(0)
+	SLOTS_PER_HISTORICAL_ROOT    = 8192
+	EPOCHS_PER_HISTORICAL_VECTOR = 65536
+	EPOCHS_PER_SLASHINGS_VECTOR  = 8192
+	SYNC_COMMITTEE_SIZE          = 512
+	MAX_EFFECTIVE_BALANCE        = uint64(32000000000) // 32 ETH in Gwei
+	EFFECTIVE_BALANCE_INCREMENT  = uint64(1000000000)  // 1 ETH in Gwei
 )
 
 // NewGenesisBeaconState creates a new genesis beacon state from deposits
@@ -164,20 +199,20 @@ func NewGenesisBeaconState(
 
 	// Initialize empty state
 	state := &BeaconState{
-		GenesisTime:                  genesisTime,
-		Slot:                         GENESIS_SLOT,
-		Fork:                         &Fork{
+		GenesisTime: genesisTime,
+		Slot:        GENESIS_SLOT,
+		Fork: &Fork{
 			PreviousVersion: forkVersion,
 			CurrentVersion:  forkVersion,
 			Epoch:           GENESIS_EPOCH,
 		},
-		LatestBlockHeader:            &BeaconBlockHeader{
+		LatestBlockHeader: &BeaconBlockHeader{
 			BodyRoot: [32]byte{}, // Will be set later
 		},
-		BlockRoots:                   make([][32]byte, SLOTS_PER_HISTORICAL_ROOT),
-		StateRoots:                   make([][32]byte, SLOTS_PER_HISTORICAL_ROOT),
-		HistoricalRoots:              [][32]byte{},
-		Eth1Data:                     &Eth1Data{
+		BlockRoots:      make([][32]byte, SLOTS_PER_HISTORICAL_ROOT),
+		StateRoots:      make([][32]byte, SLOTS_PER_HISTORICAL_ROOT),
+		HistoricalRoots: [][32]byte{},
+		Eth1Data: &Eth1Data{
 			DepositRoot:  [32]byte{},
 			DepositCount: uint64(len(deposits)),
 			BlockHash:    eth1BlockHash,
@@ -271,14 +306,19 @@ func computeValidatorsRoot(validators []*Validator) ([32]byte, error) {
 		return [32]byte{}, nil
 	}
 
-	// Use fastssz to compute merkle root
-	hh := fastssz.NewHasher()
-	defer hh.PutHasher()
+	// Use fastssz to compute merkle root - simplified for v1.0.0
+	// Since Validator doesn't have HashTreeRootWith in v1.0.0, we'll compute it differently
+	hh := ssz.DefaultHasherPool.Get()
+	defer ssz.DefaultHasherPool.Put(hh)
 
+	// For each validator, we need to hash their fields
 	for _, v := range validators {
-		if err := v.HashTreeRootWith(hh); err != nil {
+		// Hash validator fields manually since HashTreeRootWith is not available
+		root, err := v.HashTreeRoot()
+		if err != nil {
 			return [32]byte{}, err
 		}
+		hh.Append(root[:])
 	}
 
 	root, err := hh.HashRoot()
@@ -375,7 +415,7 @@ func emptyWithdrawalsRoot() [32]byte {
 
 // SaveGenesisSSZToFile saves genesis beacon state to file in SSZ format using fastssz
 func SaveGenesisSSZToFile(state *BeaconState, outputPath string) error {
-	// Encode to SSZ using fastssz (implementation in ssz_fastssz.go)
+	// Encode to SSZ using fastssz (implementation in ssz_ssz.go)
 	data, err := state.MarshalSSZ()
 	if err != nil {
 		return fmt.Errorf("failed to encode beacon state: %w", err)

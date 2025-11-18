@@ -1,23 +1,20 @@
 package genesis
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 )
 
 // ConsensusConfig contains configuration for consensus layer genesis
 type ConsensusConfig struct {
-	GenesisTime           uint64
-	GenesisValidatorRoot  string
-	GenesisForkVersion    string
-	ChainID               uint64
-	NetworkName           string
-	PresetBase            string // "mainnet" or "minimal"
-	ValidatorCount        uint64
-	Eth1BlockHash         string
-	Eth1Timestamp         uint64
+	GenesisTime            uint64
+	GenesisValidatorRoot   string
+	GenesisForkVersion     string
+	ChainID                uint64
+	NetworkName            string
+	PresetBase             string // "mainnet" or "minimal"
+	ValidatorCount         uint64
+	Eth1BlockHash          string
+	Eth1Timestamp          uint64
 	DepositContractAddress string
 }
 

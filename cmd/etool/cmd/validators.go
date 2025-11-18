@@ -21,6 +21,11 @@ var generateValidatorsCmd = &cobra.Command{
 	Short: "Generate validator keystores only",
 	Long:  `Generates validator keystores, passwords, and optionally deposit data.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Validate validatorCount
+		if validatorCount == 0 {
+			return fmt.Errorf("validatorCount must be > 0")
+		}
+
 		fmt.Printf("👥 Generating %d validator keystores (production-grade BLS)...\n", validatorCount)
 
 		// Generate or use provided mnemonic

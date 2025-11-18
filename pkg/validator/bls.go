@@ -39,11 +39,11 @@ func NewBLSKeyDerivation(mnemonic string) (*BLSKeyDerivation, error) {
 func (b *BLSKeyDerivation) DeriveValidatorKey(validatorIndex uint64) (*e2types.BLSPrivateKey, error) {
 	// EIP-2333 key derivation path
 	path := []uint32{
-		12381,                   // Purpose (BLS12-381)
-		3600,                    // Coin type (Ethereum consensus)
-		uint32(validatorIndex),  // Validator index
-		0,                       // Use (0 = withdrawal, non-zero = signing)
-		0,                       // Key index
+		12381,                  // Purpose (BLS12-381)
+		3600,                   // Coin type (Ethereum consensus)
+		uint32(validatorIndex), // Validator index
+		0,                      // Use (0 = withdrawal, non-zero = signing)
+		0,                      // Key index
 	}
 
 	return b.deriveKey(path)
@@ -54,10 +54,10 @@ func (b *BLSKeyDerivation) DeriveValidatorKey(validatorIndex uint64) (*e2types.B
 func (b *BLSKeyDerivation) DeriveWithdrawalKey(validatorIndex uint64) (*e2types.BLSPrivateKey, error) {
 	// EIP-2333 key derivation path
 	path := []uint32{
-		12381,                   // Purpose (BLS12-381)
-		3600,                    // Coin type (Ethereum consensus)
-		uint32(validatorIndex),  // Validator index
-		0,                       // Use (0 = withdrawal)
+		12381,                  // Purpose (BLS12-381)
+		3600,                   // Coin type (Ethereum consensus)
+		uint32(validatorIndex), // Validator index
+		0,                      // Use (0 = withdrawal)
 	}
 
 	return b.deriveKey(path)
@@ -137,12 +137,23 @@ func GenerateBLSValidatorKeys(mnemonic string, validatorIndex uint64) (*BLSValid
 
 	path := fmt.Sprintf(ValidatorPathTemplate, validatorIndex)
 
+	// Get public keys with proper type assertion
+	validatorPubKey, ok := validatorPrivKey.PublicKey().(*e2types.BLSPublicKey)
+	if !ok {
+		return nil, fmt.Errorf("failed to assert validator public key type")
+	}
+
+	withdrawalPubKey, ok := withdrawalPrivKey.PublicKey().(*e2types.BLSPublicKey)
+	if !ok {
+		return nil, fmt.Errorf("failed to assert withdrawal public key type")
+	}
+
 	return &BLSValidatorKeys{
 		ValidatorIndex:       validatorIndex,
 		ValidatorPrivateKey:  validatorPrivKey,
-		ValidatorPublicKey:   validatorPrivKey.PublicKey(),
+		ValidatorPublicKey:   validatorPubKey,
 		WithdrawalPrivateKey: withdrawalPrivKey,
-		WithdrawalPublicKey:  withdrawalPrivKey.PublicKey(),
+		WithdrawalPublicKey:  withdrawalPubKey,
 		Path:                 path,
 	}, nil
 }
