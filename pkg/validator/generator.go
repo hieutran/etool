@@ -76,11 +76,36 @@ func (g *Generator) GenerateKeys(validatorIndex uint64) (*ValidatorKeys, error) 
 func (g *Generator) deriveKey(path string) ([]byte, error) {
 	// Use HKDF to derive key material
 	hash := sha256.New
-	hkdf := hkdf.New(hash, g.seed, nil, []byte(path))
+	hkdfReader := hkdf.New(hash, g.seed, nil, []byte(path))
 
-	key := make([]byte, 32)
-	if _, err := hkdf.Read(key); err != nil {
+	// Read more bytes than needed for better entropy
+	keyMaterial := make([]byte, 48)
+	if _, err := hkdfReader.Read(keyMaterial); err != nil {
 		return nil, fmt.Errorf("failed to derive key: %w", err)
+	}
+
+	// Take SHA256 hash to get 32 bytes and reduce likelihood of invalid keys
+	// This is a workaround - proper EIP-2333 uses IKM_to_lamport_SK and mod_r
+	hasher := sha256.New()
+	hasher.Write(keyMaterial)
+	hasher.Write([]byte(path)) // Add path for additional entropy
+	key := hasher.Sum(nil)
+
+	// Simple validation - ensure not all zeros
+	allZeros := true
+	for _, b := range key {
+		if b != 0 {
+			allZeros = false
+			break
+		}
+	}
+	if allZeros {
+		// Try again with different salt
+		hasher.Reset()
+		hasher.Write(keyMaterial)
+		hasher.Write([]byte(path))
+		hasher.Write([]byte{1}) // Add salt
+		key = hasher.Sum(nil)
 	}
 
 	return key, nil

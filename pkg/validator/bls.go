@@ -77,13 +77,26 @@ func (b *BLSKeyDerivation) deriveKey(path []uint32) (*e2types.BLSPrivateKey, err
 	}
 
 	// Convert to BLS private key
-	// Take mod of the key material to ensure it's within the BLS curve order
-	privateKey, err := e2types.BLSPrivateKeyFromBytes(key[:32])
-	if err != nil {
-		return nil, fmt.Errorf("failed to create BLS private key: %w", err)
+	// Retry with different salts until we get a valid key
+	maxAttempts := 256
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		// Try to create the key
+		keyMaterial := key[:32]
+		if attempt > 0 {
+			// If previous attempt failed, hash again with attempt number
+			hasher := sha256.New()
+			hasher.Write(key[:32])
+			hasher.Write([]byte{byte(attempt)})
+			keyMaterial = hasher.Sum(nil)[:32]
+		}
+		
+		privateKey, err := e2types.BLSPrivateKeyFromBytes(keyMaterial)
+		if err == nil {
+			return privateKey, nil
+		}
 	}
 
-	return privateKey, nil
+	return nil, fmt.Errorf("failed to generate valid BLS private key after %d attempts", maxAttempts)
 }
 
 // deriveChildKey derives a child key using HKDF (simplified EIP-2333)
