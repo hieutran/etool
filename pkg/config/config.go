@@ -1,0 +1,176 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v3"
+)
+
+// NetworkConfig represents the consensus layer network configuration
+type NetworkConfig struct {
+	// Preset
+	PresetBase string `yaml:"PRESET_BASE"`
+
+	// Genesis
+	MinGenesisActiveValidatorCount uint64 `yaml:"MIN_GENESIS_ACTIVE_VALIDATOR_COUNT"`
+	MinGenesisTime                 uint64 `yaml:"MIN_GENESIS_TIME"`
+	GenesisForkVersion             string `yaml:"GENESIS_FORK_VERSION"`
+	GenesisDelay                   uint64 `yaml:"GENESIS_DELAY"`
+
+	// Altair
+	AltairForkEpoch   uint64 `yaml:"ALTAIR_FORK_EPOCH"`
+	AltairForkVersion string `yaml:"ALTAIR_FORK_VERSION"`
+
+	// Bellatrix (Merge)
+	BellatrixForkEpoch   uint64 `yaml:"BELLATRIX_FORK_EPOCH"`
+	BellatrixForkVersion string `yaml:"BELLATRIX_FORK_VERSION"`
+
+	// Capella
+	CapellaForkEpoch   uint64 `yaml:"CAPELLA_FORK_EPOCH"`
+	CapellaForkVersion string `yaml:"CAPELLA_FORK_VERSION"`
+
+	// Deneb
+	DenebForkEpoch   uint64 `yaml:"DENEB_FORK_EPOCH"`
+	DenebForkVersion string `yaml:"DENEB_FORK_VERSION"`
+
+	// Electra (optional)
+	ElectraForkEpoch   *uint64 `yaml:"ELECTRA_FORK_EPOCH,omitempty"`
+	ElectraForkVersion *string `yaml:"ELECTRA_FORK_VERSION,omitempty"`
+
+	// Time parameters
+	SecondsPerSlot               uint64 `yaml:"SECONDS_PER_SLOT"`
+	SecondsPerEth1Block          uint64 `yaml:"SECONDS_PER_ETH1_BLOCK"`
+	MinValidatorWithdrawability  uint64 `yaml:"MIN_VALIDATOR_WITHDRAWABILITY_DELAY"`
+	ShardCommitteePeriod         uint64 `yaml:"SHARD_COMMITTEE_PERIOD"`
+	Eth1FollowDistance           uint64 `yaml:"ETH1_FOLLOW_DISTANCE"`
+
+	// Validator
+	InactivityScoreBias              uint64 `yaml:"INACTIVITY_SCORE_BIAS"`
+	InactivityScoreRecoveryRate      uint64 `yaml:"INACTIVITY_SCORE_RECOVERY_RATE"`
+	EjectionBalance                  uint64 `yaml:"EJECTION_BALANCE"`
+	MinPerEpochChurnLimit            uint64 `yaml:"MIN_PER_EPOCH_CHURN_LIMIT"`
+	ChurnLimitQuotient               uint64 `yaml:"CHURN_LIMIT_QUOTIENT"`
+
+	// Deposit contract
+	DepositChainID         uint64 `yaml:"DEPOSIT_CHAIN_ID"`
+	DepositNetworkID       uint64 `yaml:"DEPOSIT_NETWORK_ID"`
+	DepositContractAddress string `yaml:"DEPOSIT_CONTRACT_ADDRESS"`
+}
+
+// DefaultNetworkConfig returns a default network configuration for a devnet
+func DefaultNetworkConfig() *NetworkConfig {
+	return &NetworkConfig{
+		PresetBase:                     "mainnet",
+		MinGenesisActiveValidatorCount: 64,
+		MinGenesisTime:                 0,
+		GenesisForkVersion:             "0x00000001",
+		GenesisDelay:                   300,
+
+		// Fork epochs - all at epoch 0 for devnet
+		AltairForkEpoch:      0,
+		AltairForkVersion:    "0x01000001",
+		BellatrixForkEpoch:   0,
+		BellatrixForkVersion: "0x02000001",
+		CapellaForkEpoch:     0,
+		CapellaForkVersion:   "0x03000001",
+		DenebForkEpoch:       0,
+		DenebForkVersion:     "0x04000001",
+
+		// Time parameters
+		SecondsPerSlot:              12,
+		SecondsPerEth1Block:         14,
+		MinValidatorWithdrawability: 256,
+		ShardCommitteePeriod:        256,
+		Eth1FollowDistance:          2048,
+
+		// Validator parameters
+		InactivityScoreBias:         4,
+		InactivityScoreRecoveryRate: 16,
+		EjectionBalance:             16000000000, // 16 ETH in Gwei
+		MinPerEpochChurnLimit:       4,
+		ChurnLimitQuotient:          65536,
+
+		// Deposit contract
+		DepositChainID:         32382,
+		DepositNetworkID:       32382,
+		DepositContractAddress: "0x4242424242424242424242424242424242424242",
+	}
+}
+
+// Generator handles network configuration generation
+type Generator struct {
+	config *NetworkConfig
+}
+
+// NewGenerator creates a new config generator
+func NewGenerator(config *NetworkConfig) *Generator {
+	if config == nil {
+		config = DefaultNetworkConfig()
+	}
+	return &Generator{config: config}
+}
+
+// SetChainID sets the chain ID for the network
+func (g *Generator) SetChainID(chainID uint64) {
+	g.config.DepositChainID = chainID
+	g.config.DepositNetworkID = chainID
+}
+
+// SetMinGenesisTime sets the minimum genesis time
+func (g *Generator) SetMinGenesisTime(timestamp uint64) {
+	g.config.MinGenesisTime = timestamp
+}
+
+// SetValidatorCount sets the minimum validator count for genesis
+func (g *Generator) SetValidatorCount(count uint64) {
+	g.config.MinGenesisActiveValidatorCount = count
+}
+
+// Generate creates the network configuration
+func (g *Generator) Generate() (*NetworkConfig, error) {
+	return g.config, nil
+}
+
+// SaveToFile writes a network configuration to a file
+func SaveToFile(config *NetworkConfig, outputPath string) error {
+	// Ensure directory exists
+	dir := filepath.Dir(outputPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	// Marshal to YAML
+	data, err := yaml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	// Add header comment
+	header := "# Ethereum Consensus Layer Network Configuration\n" +
+		"# Generated by eth-genesis-tool\n\n"
+	fullData := append([]byte(header), data...)
+
+	// Write to file
+	if err := os.WriteFile(outputPath, fullData, 0644); err != nil {
+		return fmt.Errorf("failed to write config.yaml: %w", err)
+	}
+
+	return nil
+}
+
+// GenerateToFile creates config.yaml and writes it to a file
+// This is a convenience method that combines Generate() and SaveToFile()
+func (g *Generator) GenerateToFile(outputPath string) error {
+	config, err := g.Generate()
+	if err != nil {
+		return err
+	}
+	return SaveToFile(config, outputPath)
+}
+
+// GetConfig returns the current configuration
+func (g *Generator) GetConfig() *NetworkConfig {
+	return g.config
+}
