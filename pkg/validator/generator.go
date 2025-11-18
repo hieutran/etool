@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	e2types "github.com/wealdtech/go-eth2-types/v2"
 	"golang.org/x/crypto/hkdf"
 )
 
@@ -71,44 +72,43 @@ func (g *Generator) GenerateKeys(validatorIndex uint64) (*ValidatorKeys, error) 
 	}, nil
 }
 
-// deriveKey derives a key using HKDF (simplified version)
+// deriveKey derives a key using HKDF with validation
 // Production code should use proper BLS12-381 key derivation (EIP-2333)
 func (g *Generator) deriveKey(path string) ([]byte, error) {
-	// Use HKDF to derive key material
-	hash := sha256.New
-	hkdfReader := hkdf.New(hash, g.seed, nil, []byte(path))
-
-	// Read more bytes than needed for better entropy
-	keyMaterial := make([]byte, 48)
-	if _, err := hkdfReader.Read(keyMaterial); err != nil {
-		return nil, fmt.Errorf("failed to derive key: %w", err)
+	// Initialize BLS
+	if err := e2types.InitBLS(); err != nil {
+		return nil, fmt.Errorf("failed to initialize BLS: %w", err)
 	}
 
-	// Take SHA256 hash to get 32 bytes and reduce likelihood of invalid keys
-	// This is a workaround - proper EIP-2333 uses IKM_to_lamport_SK and mod_r
-	hasher := sha256.New()
-	hasher.Write(keyMaterial)
-	hasher.Write([]byte(path)) // Add path for additional entropy
-	key := hasher.Sum(nil)
+	// Try multiple salts until we get a valid BLS key
+	maxAttempts := 256
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		// Use HKDF with attempt-specific salt
+		hash := sha256.New
+		salt := []byte(fmt.Sprintf("%s:%d", path, attempt))
+		hkdfReader := hkdf.New(hash, g.seed, salt, []byte(path))
 
-	// Simple validation - ensure not all zeros
-	allZeros := true
-	for _, b := range key {
-		if b != 0 {
-			allZeros = false
-			break
+		// Read key material
+		keyMaterial := make([]byte, 48)
+		if _, err := hkdfReader.Read(keyMaterial); err != nil {
+			return nil, fmt.Errorf("failed to derive key: %w", err)
+		}
+
+		// Hash to get 32 bytes
+		hasher := sha256.New()
+		hasher.Write(keyMaterial)
+		hasher.Write(salt)
+		key := hasher.Sum(nil)
+
+		// Validate that this key works with BLS
+		_, err := e2types.BLSPrivateKeyFromBytes(key)
+		if err == nil {
+			// Valid key found!
+			return key, nil
 		}
 	}
-	if allZeros {
-		// Try again with different salt
-		hasher.Reset()
-		hasher.Write(keyMaterial)
-		hasher.Write([]byte(path))
-		hasher.Write([]byte{1}) // Add salt
-		key = hasher.Sum(nil)
-	}
 
-	return key, nil
+	return nil, fmt.Errorf("failed to derive valid BLS key after %d attempts for path %s", maxAttempts, path)
 }
 
 // derivePubKey derives a public key from a private key (simplified)
