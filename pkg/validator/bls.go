@@ -10,6 +10,9 @@ import (
 )
 
 // BLSKeyDerivation handles BLS12-381 key derivation following EIP-2333
+// NOTE: This is a simplified implementation for development/testing purposes.
+// For production use, consider using official staking-deposit-cli or libraries
+// that provide full EIP-2333 HKDF-based key derivation.
 type BLSKeyDerivation struct {
 	mnemonic string
 	seed     []byte

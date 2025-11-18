@@ -22,7 +22,15 @@ func NewBLSDepositGenerator(forkVersion, networkName string, credType Withdrawal
 	}
 
 	// Decode fork version
-	forkBytes, err := hex.DecodeString(forkVersion[2:]) // Remove 0x prefix
+	// Validate and remove 0x prefix
+	if len(forkVersion) < 2 {
+		return nil, fmt.Errorf("invalid fork version: too short")
+	}
+	forkVersionHex := forkVersion
+	if forkVersion[:2] == "0x" {
+		forkVersionHex = forkVersion[2:]
+	}
+	forkBytes, err := hex.DecodeString(forkVersionHex)
 	if err != nil {
 		return nil, fmt.Errorf("invalid fork version: %w", err)
 	}

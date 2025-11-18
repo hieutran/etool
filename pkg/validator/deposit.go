@@ -60,6 +60,12 @@ func GenerateWithdrawalCredentials(withdrawalPubKey []byte, credType WithdrawalC
 		// For simplicity, derive execution address from pubkey hash
 		hash := sha256.Sum256(withdrawalPubKey)
 		copy(credentials[12:], hash[:20])
+
+	default:
+		// Default to BLS withdrawal for unknown types
+		credentials[0] = 0x00
+		hash := sha256.Sum256(withdrawalPubKey)
+		copy(credentials[1:], hash[1:])
 	}
 
 	return "0x" + hex.EncodeToString(credentials)
