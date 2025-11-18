@@ -1,7 +1,10 @@
 package validator
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -9,6 +12,8 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
+	e2types "github.com/wealdtech/go-eth2-types/v2"
+	"golang.org/x/crypto/scrypt"
 )
 
 // Keystore represents an EIP-2335 compliant keystore
@@ -132,21 +137,57 @@ func NewUUID() string {
 }
 
 // CreateEncryptedKeystore creates an EIP-2335 compliant keystore from a private key
+// This function implements proper encryption following the EIP-2335 specification:
+// - Derives BLS public key from private key
+// - Uses scrypt KDF with provided password to derive encryption key
+// - Encrypts private key with AES-128-CTR
+// - Computes SHA-256 checksum for integrity verification
 func CreateEncryptedKeystore(privateKeyBytes []byte, password string, validatorIndex uint64) (*Keystore, error) {
-	// Generate random salt and IV
+	// Validate inputs
+	if len(privateKeyBytes) != 32 {
+		return nil, fmt.Errorf("invalid private key length: expected 32 bytes, got %d", len(privateKeyBytes))
+	}
+	if password == "" {
+		return nil, fmt.Errorf("password cannot be empty")
+	}
+
+	// Derive the BLS public key from the private key
+	pubkey, err := derivePublicKeyFromPrivate(privateKeyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive public key: %w", err)
+	}
+	pubkeyHex := hex.EncodeToString(pubkey)
+
+	// Generate random salt for scrypt KDF (32 bytes as per EIP-2335)
 	salt := make([]byte, 32)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, fmt.Errorf("failed to generate salt: %w", err)
 	}
 
+	// Generate random IV for AES-128-CTR (16 bytes)
 	iv := make([]byte, 16)
 	if _, err := rand.Read(iv); err != nil {
 		return nil, fmt.Errorf("failed to generate IV: %w", err)
 	}
 
-	// For production, this should use proper scrypt key derivation and AES-128-CTR encryption
-	// For now, we'll create a simplified version
-	pubkeyHex := hex.EncodeToString(privateKeyBytes) // Placeholder - should derive actual public key
+	// Derive decryption key using scrypt
+	// Parameters from EIP-2335: N=262144, r=8, p=1, dklen=32
+	decryptionKey, err := scrypt.Key([]byte(password), salt, 262144, 8, 1, 32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive key with scrypt: %w", err)
+	}
+
+	// Use first 16 bytes for AES-128-CTR encryption
+	aesKey := decryptionKey[:16]
+
+	// Encrypt the private key using AES-128-CTR
+	ciphertext, err := encryptAES128CTR(privateKeyBytes, aesKey, iv)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt private key: %w", err)
+	}
+
+	// Compute checksum: SHA-256 hash of decryptionKey[16:32] + ciphertext
+	checksum := computeChecksum(decryptionKey[16:32], ciphertext)
 
 	path := fmt.Sprintf(ValidatorPathTemplate, validatorIndex)
 
@@ -161,19 +202,19 @@ func CreateEncryptedKeystore(privateKeyBytes []byte, password string, validatorI
 					"r":     8,
 					"salt":  hex.EncodeToString(salt),
 				},
-				Message: "",
+				Message: "", // Empty as per EIP-2335
 			},
 			Checksum: ChecksumFields{
 				Function: "sha256",
 				Params:   map[string]interface{}{},
-				Message:  "",
+				Message:  hex.EncodeToString(checksum),
 			},
 			Cipher: CipherFields{
 				Function: "aes-128-ctr",
 				Params: map[string]interface{}{
 					"iv": hex.EncodeToString(iv),
 				},
-				Message: hex.EncodeToString(privateKeyBytes), // Should be encrypted
+				Message: hex.EncodeToString(ciphertext),
 			},
 		},
 		Description: fmt.Sprintf("Validator %d", validatorIndex),
@@ -182,4 +223,62 @@ func CreateEncryptedKeystore(privateKeyBytes []byte, password string, validatorI
 		UUID:        NewUUID(),
 		Version:     4,
 	}, nil
+}
+
+// derivePublicKeyFromPrivate derives a BLS public key from a private key
+// This uses the go-eth2-types library for proper BLS12-381 operations
+func derivePublicKeyFromPrivate(privateKeyBytes []byte) ([]byte, error) {
+	// Initialize BLS (idempotent, safe to call multiple times)
+	if err := e2types.InitBLS(); err != nil {
+		return nil, fmt.Errorf("failed to initialize BLS: %w", err)
+	}
+
+	// Create BLS private key from bytes
+	privKey, err := e2types.BLSPrivateKeyFromBytes(privateKeyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create BLS private key: %w", err)
+	}
+
+	// Get public key
+	pubKey, ok := privKey.PublicKey().(*e2types.BLSPublicKey)
+	if !ok {
+		return nil, fmt.Errorf("failed to assert BLS public key type")
+	}
+
+	// Return marshaled public key (48 bytes compressed)
+	return pubKey.Marshal(), nil
+}
+
+// encryptAES128CTR encrypts data using AES-128 in CTR mode
+func encryptAES128CTR(plaintext, key, iv []byte) ([]byte, error) {
+	if len(key) != 16 {
+		return nil, fmt.Errorf("invalid key length: expected 16 bytes, got %d", len(key))
+	}
+	if len(iv) != 16 {
+		return nil, fmt.Errorf("invalid IV length: expected 16 bytes, got %d", len(iv))
+	}
+
+	// Create AES cipher
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
+	}
+
+	// Create CTR stream
+	stream := cipher.NewCTR(block, iv)
+
+	// Encrypt
+	ciphertext := make([]byte, len(plaintext))
+	stream.XORKeyStream(ciphertext, plaintext)
+
+	return ciphertext, nil
+}
+
+// computeChecksum computes the EIP-2335 checksum
+// Checksum is SHA-256(decryptionKey[16:32] || ciphertext)
+func computeChecksum(decryptionKeySuffix, ciphertext []byte) []byte {
+	hasher := sha256.New()
+	hasher.Write(decryptionKeySuffix)
+	hasher.Write(ciphertext)
+	return hasher.Sum(nil)
 }

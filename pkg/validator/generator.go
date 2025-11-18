@@ -126,40 +126,13 @@ func (g *Generator) GenerateKeystoresInMemory(startIndex, count uint64, password
 			return nil, fmt.Errorf("failed to generate password for validator %d: %w", validatorIndex, err)
 		}
 
-		// Create keystore (simplified - should use proper encryption)
-		pubkeyHex := hex.EncodeToString(keys.PublicKey)
-		keystore := &Keystore{
-			Crypto: CryptoFields{
-				KDF: KDFFields{
-					Function: "scrypt",
-					Params: map[string]interface{}{
-						"dklen": 32,
-						"n":     262144,
-						"p":     1,
-						"r":     8,
-						"salt":  hex.EncodeToString([]byte("salt")), // Should be random
-					},
-					Message: "", // Should be encrypted private key
-				},
-				Checksum: ChecksumFields{
-					Function: "sha256",
-					Params:   map[string]interface{}{},
-					Message:  "", // Should be checksum
-				},
-				Cipher: CipherFields{
-					Function: "aes-128-ctr",
-					Params: map[string]interface{}{
-						"iv": hex.EncodeToString([]byte("iv")), // Should be random
-					},
-					Message: hex.EncodeToString(keys.PrivateKey), // Should be encrypted
-				},
-			},
-			Description: fmt.Sprintf("Validator %d", validatorIndex),
-			Pubkey:      pubkeyHex,
-			Path:        keys.Path,
-			UUID:        NewUUID(),
-			Version:     4,
+		// Create encrypted keystore using proper EIP-2335 encryption
+		keystore, err := CreateEncryptedKeystore(keys.PrivateKey, password, validatorIndex)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create encrypted keystore for validator %d: %w", validatorIndex, err)
 		}
+
+		pubkeyHex := hex.EncodeToString(keys.PublicKey)
 
 		keystores = append(keystores, &KeystoreWithPassword{
 			Keystore: keystore,
