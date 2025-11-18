@@ -115,7 +115,7 @@ func (g *ExecutionGenerator) Generate() (*core.Genesis, error) {
 		Timestamp:  g.config.Timestamp,
 		ExtraData:  []byte(g.config.ExtraData),
 		GasLimit:   g.config.GasLimit,
-		Difficulty: big.NewInt(int64(g.config.Difficulty)),
+		Difficulty: new(big.Int).SetUint64(g.config.Difficulty),
 		Mixhash:    g.config.MixHash,
 		Coinbase:   g.config.Coinbase,
 		Alloc:      g.config.Alloc,

@@ -106,7 +106,8 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fmt.Errorf("failed to generate mnemonic: %w", err)
 			}
-			fmt.Printf("   ⚠️  IMPORTANT: Save this mnemonic securely!\n")
+			fmt.Printf("   ⚠️  SECURITY WARNING: The mnemonic will be displayed. Ensure no one else can see your screen.\n")
+			fmt.Printf("   ⚠️  IMPORTANT: Save this mnemonic securely and never share it!\n")
 			fmt.Printf("   📋 Mnemonic: %s\n\n", validatorMnemonic)
 
 			// Save mnemonic to file
@@ -122,6 +123,11 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			}
 			fmt.Printf("✅ Using provided mnemonic\n\n")
 		}
+	}
+
+	// Validate numValidators after override
+	if numValidators == 0 {
+		return fmt.Errorf("num-validators must be greater than 0")
 	}
 
 	// Step 4: Generate execution layer genesis

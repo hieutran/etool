@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -51,6 +52,11 @@ func (g *Generator) Generate() (*NodeKey, error) {
 
 // SaveToFile writes a node key to a file
 func SaveToFile(nodeKey *NodeKey, outputPath string) error {
+	// Validate nodeKey is not nil
+	if nodeKey == nil {
+		return fmt.Errorf("nodeKey cannot be nil")
+	}
+
 	// Ensure directory exists
 	dir := filepath.Dir(outputPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -95,7 +101,10 @@ func LoadFromFile(path string) (*NodeKey, error) {
 		return nil, fmt.Errorf("failed to read node key: %w", err)
 	}
 
-	privateKeyBytes, err := hex.DecodeString(string(data))
+	// Trim whitespace to handle trailing newlines/spaces
+	privateKeyHex := strings.TrimSpace(string(data))
+
+	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode node key: %w", err)
 	}

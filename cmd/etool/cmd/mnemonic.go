@@ -19,7 +19,8 @@ var generateMnemonicCmd = &cobra.Command{
 			return fmt.Errorf("failed to generate mnemonic: %w", err)
 		}
 
-		fmt.Printf("⚠️  IMPORTANT: Save this mnemonic securely!\n")
+		fmt.Printf("⚠️  SECURITY WARNING: The mnemonic will be displayed. Ensure no one else can see your screen.\n")
+		fmt.Printf("⚠️  IMPORTANT: Save this mnemonic securely and never share it!\n")
 		fmt.Printf("⚠️  Anyone with this mnemonic can control your validators!\n\n")
 		fmt.Printf("📋 Mnemonic:\n")
 		fmt.Printf("   %s\n\n", mnemonic)
